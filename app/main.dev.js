@@ -63,7 +63,8 @@ app.on('ready', async () => {
   mainWindow = new BrowserWindow({
     show: false,
     width: 1024,
-    height: 728
+    height: 728,
+    icon: `${__dirname}/icon.png`
   });
 
   mainWindow.loadURL(`file://${__dirname}/app.html`);
@@ -77,6 +78,8 @@ app.on('ready', async () => {
     if (process.env.START_MINIMIZED) {
       mainWindow.minimize();
     } else {
+      mainWindow.setBackgroundColor('#111111');
+      mainWindow.setMenu(null);
       mainWindow.show();
       mainWindow.focus();
     }
