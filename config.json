@@ -1,0 +1,34 @@
+{
+  "Version": "1.0",
+  "Database": {
+    "Location": "data.db",
+    "Schema": "CREATE TABLE IF NOT EXISTS releases(mbid STRING PRIMARY KEY,fileName STRING NOT NULL)",
+    "Queries": {
+      "insert": "INSERT INTO releases (mbid,filename) VALUES (?,?)",
+      "exists": "SELECT 1 FROM releases WHERE mbid = ? LIMIT 1",
+      "update": "UPDATE releases SET filename = ? WHERE mbid = ?"
+    }
+  },
+  "Output Directory": "images/",
+  "MusicBrainz": {
+    "Base URL": "https://musicbrainz.org/ws/2/release",
+    "Page Limit": 100,
+    "Page Offset": 0,
+    "Max Pages": 0,
+    "Requests/Sec": 1,
+    "User-Agent": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
+  },
+  "CoverArtArchive": {
+    "Base URL": "https://coverartarchive.org/release"
+  },
+  "Retry Codes": {
+    "ETIMEDOUT": true,
+    "ECONNRESET": true,
+    "ENOTFOUND": true,
+    "ENETUNREACH": true,
+    "ECONNREFUSED": true
+  },
+  "Logging": {
+    "Directory": "logs/"
+  }
+}
