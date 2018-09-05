@@ -18,6 +18,16 @@
   font-size: 13px;
   padding-top: 10px;
   padding-bottom: 10px;
+  width: calc(100% - 175px);
+  min-width: 100px;
+  text-overflow: break-word;
+  word-break: break-all;
+}
+
+.location-placeholder-value {
+  display: inline;
+  font-weight: italic;
+  color: #777;
 }
 
 .file-input input[type='file'] {

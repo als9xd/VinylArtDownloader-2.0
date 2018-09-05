@@ -14,6 +14,7 @@
     "Base URL": "https://musicbrainz.org/ws/2/release",
     "Page Limit": 100,
     "Page Offset": 0,
+    "Page Count": 0,
     "Max Pages": 0,
     "Requests/Sec": 1,
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"

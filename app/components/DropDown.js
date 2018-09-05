@@ -4,6 +4,16 @@ import PropTypes from 'prop-types';
 import styles from './DropDown.css';
 
 class DropDown extends Component {
+  constructor(props) {
+    super(props);
+    this.onOptionChange = this.onOptionChange.bind(this);
+  }
+
+  onOptionChange(evt) {
+    const { changeDropdownOption } = this.props;
+    changeDropdownOption(evt.target.value);
+  }
+
   render() {
     const { options, info } = this.props;
 
@@ -15,7 +25,9 @@ class DropDown extends Component {
       <div className={styles.dropdown}>
         <div className="row">
           <span className={styles['dropdown-info']}>{info}</span>
-          <select>{options.map(option => createOption(option))}</select>
+          <select onChange={this.onOptionChange}>
+            {options.map(option => createOption(option))}
+          </select>
         </div>
       </div>
     );
@@ -24,12 +36,14 @@ class DropDown extends Component {
 
 DropDown.propTypes = {
   options: PropTypes.arrayOf(PropTypes.string),
-  info: PropTypes.string
+  info: PropTypes.string,
+  changeDropdownOption: PropTypes.func
 };
 
 DropDown.defaultProps = {
   options: [],
-  info: ''
+  info: '',
+  changeDropdownOption: () => {}
 };
 
 export default DropDown;

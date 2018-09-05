@@ -8,13 +8,14 @@
 .text-input input {
   display: inline-block;
   float: right;
-  width: 150px;
+  width: 140px;
   height: 23px;
   background: #333;
   color: #999;
   border: 0;
   padding-left: 5px;
-  margin-right: 5px;
+  margin-right: 0px;
+  margin-left: 50px;
 }
 
 .text-input input:focus {
@@ -29,4 +30,17 @@
   vertical-align: middle;
   padding-top: 5px;
   padding-bottom: 5px;
+}
+
+.error {
+  background-color: rgba(250, 0, 0, 0.2) !important;
+}
+
+.valid {
+  background: #333;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  height: 23px;
 }

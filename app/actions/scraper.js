@@ -6,7 +6,6 @@ const _ = require('lodash');
 
 const request = require('request');
 
-const timeSpan = require('time-span');
 const EventEmitter = require('events');
 
 const winston = require('winston');
@@ -25,13 +24,36 @@ const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
 class Scraper extends EventEmitter {
   constructor(options = {}) {
     super();
+    const self = this;
+    this.locked = true;
 
     this._options = _.merge({}, config, options);
+    this.defaults = this._options;
 
     this._initLogger();
 
     this._initMetrics();
-    this.locked = false;
+    this.getReleaseCount(
+      `${
+        this._options['MusicBrainz']['Base URL']
+      }?query=*&type=album&format=Vinyl&limit=1&offset=0`,
+      this._options
+    )
+      .then(releaseCount => {
+        self.locked = false;
+        self.emit('lock_change', self.locked);
+        self.emit('ready');
+
+        const nPages = Math.floor(
+          releaseCount / self._options['MusicBrainz']['Page Limit']
+        );
+
+        self.emit('metrics.set', 'musicbrainz_page_count', nPages);
+        return nPages;
+      })
+      .catch(err => {
+        throw err;
+      });
   }
 
   _initLogger() {
@@ -96,15 +118,14 @@ class Scraper extends EventEmitter {
   _initMetrics() {
     const self = this;
 
-    const elapsedTime = timeSpan();
     const metricsDefaults = {
+      start_time: new Date(),
       total_checked: 0,
       total_downloaded: 0,
       missing_cover_art: 0,
       rate_limits: 0,
-      max_musicbrainz_pages: 0,
-      musicbrainz_pages_scraped: 0,
-      elapsed_time: elapsedTime
+      musicbrainz_page_count: 0,
+      musicbrainz_pages_scraped: 0
     };
 
     const numRetryCodes = {};
@@ -112,50 +133,37 @@ class Scraper extends EventEmitter {
       numRetryCodes[key] = 0;
     });
 
-    this._metrics = _.merge({}, metricsDefaults, numRetryCodes);
+    this.metrics = _.merge({}, metricsDefaults, numRetryCodes);
 
-    if (typeof this._metrics_listeners !== 'undefined') return;
-    this._metrics_listeners = {
+    if (typeof this.metrics_listeners !== 'undefined') return;
+    this.metrics_listeners = {
       'metrics.set': this.on('metrics.set', (key, value) => {
-        self._metrics[key] = value;
-        self.emit('metrics.refresh', self._metrics);
+        self.metrics[key] = value;
+        self.emit('metrics.refresh', self.metrics);
       }),
 
       'metrics.increment': this.on('metrics.increment', key => {
-        self._metrics[key]++;
-        self.emit('metrics.refresh', self._metrics);
+        self.metrics[key]++;
+        self.emit('metrics.refresh', self.metrics);
       })
     };
   }
 
-  getMetricsTable(metrics = this._metrics) {
-    const self = this;
-
+  getMetricsTable(metrics = this.metrics) {
     const metricsTable = [
       {
         header: {
-          title: 'Downloads/Sec',
+          title: 'Total Downloads',
           color: 'green'
         },
-        value: m =>
-          parseFloat(
-            Math.round((m.total_downloaded / m.elapsed_time()) * 1000 * 100) /
-              100
-          ).toFixed(2)
+        value: m => m.total_downloaded
       },
       {
         header: {
           title: 'Total Checked',
           color: 'green'
         },
-        value: m =>
-          `${m.total_checked}/${parseFloat(
-            Math.round(
-              m.max_musicbrainz_pages *
-                self._options['MusicBrainz']['Page Limit'] *
-                100
-            ) / 100
-          ).toFixed(2)}`
+        value: m => m.total_checked
       },
       {
         header: {
@@ -201,8 +209,9 @@ class Scraper extends EventEmitter {
     });
   }
 
-  downloadImage(imageURL, dir) {
+  downloadImage(imageURL, options = this._options) {
     const self = this;
+    const dir = options['Output Directory'];
     return new Promise((resolve, reject) => {
       request(
         imageURL,
@@ -213,9 +222,9 @@ class Scraper extends EventEmitter {
         (err, res, body) => {
           if (err) {
             self.logger.http(err);
-            if (self._options['Retry Codes'][err.code] === true) {
+            if (options['Retry Codes'][err.code] === true) {
               self.emit('metrics.increment', err.code);
-              return self.downloadImage(imageURL, dir);
+              return self.downloadImage(imageURL, options);
             }
             reject(err);
           }
@@ -247,8 +256,9 @@ class Scraper extends EventEmitter {
     });
   }
 
-  getCaaImageURLs(caaReleaseURL) {
+  getCaaImageURLs(caaReleaseURL, options = this._options) {
     const self = this;
+
     return new Promise((resolve, reject) => {
       request(
         caaReleaseURL,
@@ -259,13 +269,12 @@ class Scraper extends EventEmitter {
         (err, res) => {
           if (err) {
             self.logger.http(err);
-            if (self._options['Retry Codes'][err.code] === true) {
+            if (options['Retry Codes'][err.code] === true) {
               self.emit('metrics.increment', err.code);
-              return self.getCaaImageURLs(caaReleaseURL);
+              return self.getCaaImageURLs(caaReleaseURL, options);
             }
             reject(err);
           }
-
           // Doesn't have cover art
           if (res.statusCode === 404) {
             resolve(null);
@@ -277,11 +286,13 @@ class Scraper extends EventEmitter {
           if (typeof imageObjs !== 'undefined') {
             for (let i = 0; i < imageObjs.length; i++) {
               if (imageObjs[i]['front'] === true) {
-                const imageSize = self._options['Image Size'];
-                if (imageSize) {
-                  imageURLs.push(imageObjs[i]['thumbnails'][imageSize]);
-                } else {
+                const imageSize = options['Image Size'].toLowerCase();
+                if (imageSize === 'default') {
                   imageURLs.push(imageObjs[i]['image']);
+                } else if (
+                  typeof imageObjs[i]['thumbnails'][imageSize] !== 'undefined'
+                ) {
+                  imageURLs.push(imageObjs[i]['thumbnails'][imageSize]);
                 }
               }
             }
@@ -304,9 +315,13 @@ class Scraper extends EventEmitter {
       options = self._options;
       callback = a;
     }
+    if (typeof callback === 'undefined') {
+      callback = () => {};
+    }
 
     if (self.locked) callback();
     self.locked = true;
+    self.emit('lock_change', self.locked);
 
     self._initMetrics();
 
@@ -317,116 +332,102 @@ class Scraper extends EventEmitter {
     }
 
     /* Start Scraping */
-    const firstReleaseListURL = `${
-      options['MusicBrainz']['Base URL']
-    }?query=*&type=album&format=Vinyl&limit=1&offset=0`;
+    const nPages = options['MusicBrainz']['Page Count'];
+    const releaseListPageURLs = [];
+    const musicbrainzPageOffset = options['MusicBrainz']['Page Offset'];
+    for (
+      let cPage = musicbrainzPageOffset;
+      cPage < nPages + musicbrainzPageOffset;
+      cPage++
+    ) {
+      releaseListPageURLs.push(
+        `${
+          options['MusicBrainz']['Base URL']
+        }?query=*&type=album&format=Vinyl&limit=${
+          options['MusicBrainz']['Page Limit']
+        }&offset=${cPage * options['MusicBrainz']['Page Limit']}`
+      );
+    }
 
-    self
-      .getReleaseCount(firstReleaseListURL)
-      .then(releaseCount => {
-        const nPages =
-          options['MusicBrainz']['Max Pages'] ||
-          releaseCount / options['MusicBrainz']['Page Limit'];
+    // https://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
+    const limiter = new RateLimiter(
+      options['MusicBrainz']['Requests/Sec'],
+      'second'
+    );
 
-        self.emit('metrics.set', 'max_musicbrainz_pages', nPages);
-
-        const releaseListPageURLs = [];
-        const musicbrainzPageOffset = options['MusicBrainz']['Page Offset'];
-        for (
-          let cPage = musicbrainzPageOffset;
-          cPage < nPages + musicbrainzPageOffset;
-          cPage++
-        ) {
-          releaseListPageURLs.push(
-            `${
-              options['MusicBrainz']['Base URL']
-            }?query=*&type=album&format=Vinyl&limit=${
-              options['MusicBrainz']['Page Limit']
-            }&offset=${cPage * options['MusicBrainz']['Page Limit']}`
-          );
-        }
-
-        // https://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
-        const limiter = new RateLimiter(
-          options['MusicBrainz']['Requests/Sec'],
-          'second'
-        );
-
-        const releaseListPromises = releaseListPageURLs.map(
-          releaseListPageURL => {
-            return _removeTokens(limiter, 1)
-              .then(() => {
-                return self
-                  .getReleases(releaseListPageURL)
-                  .then(releases => {
-                    self.emit('metrics.increment', 'musicbrainz_pages_scraped');
-                    const caaReleasePagePromises = Object.keys(releases).map(
-                      caaReleasePageURL => {
-                        // const releaseMBID = releases[caaReleasePageURL];
-                        return self
-                          .getCaaImageURLs(caaReleasePageURL)
-                          .then(caaImageURLs => {
-                            self.emit('metrics.increment', 'total_checked');
-                            if (caaImageURLs === null) {
-                              self.emit(
-                                'metrics.increment',
-                                'missing_cover_art'
-                              );
+    const releaseListPromises = releaseListPageURLs.map(
+      // eslint-disable-next-line arrow-body-style
+      releaseListPageURL => {
+        return (
+          _removeTokens(limiter, 1)
+            // eslint-disable-next-line arrow-body-style
+            .then(() => {
+              return self
+                .getReleases(releaseListPageURL, options)
+                .then(releases => {
+                  self.emit('metrics.increment', 'musicbrainz_pages_scraped');
+                  const caaReleasePagePromises = Object.keys(releases).map(
+                    // eslint-disable-next-line arrow-body-style
+                    caaReleasePageURL => {
+                      // const releaseMBID = releases[caaReleasePageURL];
+                      return self
+                        .getCaaImageURLs(caaReleasePageURL, options)
+                        .then(caaImageURLs => {
+                          self.emit('metrics.increment', 'total_checked');
+                          if (!caaImageURLs) {
+                            self.emit('metrics.increment', 'missing_cover_art');
+                            return;
+                          }
+                          const caaImagePromises = caaImageURLs.map(
+                            // eslint-disable-next-line arrow-body-style
+                            caaImageURL => {
+                              return self
+                                .downloadImage(caaImageURL, options)
+                                .then(filePath => {
+                                  self.emit(
+                                    'metrics.increment',
+                                    'total_downloaded'
+                                  );
+                                  return filePath;
+                                })
+                                .catch(err => {
+                                  throw err;
+                                });
                             }
-                            const caaImagePromises = caaImageURLs.map(
-                              caaImageURL => {
-                                return self
-                                  .downloadImage(
-                                    caaImageURL,
-                                    options['Output Directory']
-                                  )
-                                  .then(filePath => {
-                                    self.emit(
-                                      'metrics.increment',
-                                      'total_downloaded'
-                                    );
-                                    return filePath;
-                                  })
-                                  .catch(err => {
-                                    throw err;
-                                  });
-                              }
-                            );
-                            return Promise.all(caaImagePromises);
-                          })
-                          .catch(err => {
-                            throw err;
-                          });
-                      }
-                    );
-                    return Promise.all(caaReleasePagePromises);
-                  })
-                  .catch(err => {
-                    throw err;
-                  });
-              })
-              .catch(err => {
-                throw err;
-              });
-          }
+                          );
+                          return Promise.all(caaImagePromises);
+                        })
+                        .catch(err => {
+                          throw err;
+                        });
+                    }
+                  );
+                  return Promise.all(caaReleasePagePromises);
+                })
+                .catch(err => {
+                  throw err;
+                });
+            })
+            .catch(err => {
+              throw err;
+            })
         );
+      }
+    );
 
-        /* Finished Scraping */
-        return Promise.all(releaseListPromises)
-          .then(() => {
-            self.locked = false;
-            return callback();
-          })
-          .catch(err => {
-            throw err;
-          });
+    /* Finished Scraping */
+    return Promise.all(releaseListPromises)
+      .then(() => {
+        self.locked = false;
+        self.emit('lock_change', self.locked);
+        return callback();
       })
       .catch(err => {
         throw err;
       });
   }
 
-  getReleases(releaseListURL) {
+  getReleases(releaseListURL, options = this._options) {
     const self = this;
     return new Promise((resolve, reject) => {
       request(
@@ -434,16 +435,16 @@ class Scraper extends EventEmitter {
         {
           rejectUnauthorized: false,
           headers: {
-            'User-Agent': self._options['MusicBrainz']['User-Agent']
+            'User-Agent': options['MusicBrainz']['User-Agent']
           },
           agent: false
         },
         (err, res, body) => {
           if (err) {
             self.logger.http(err);
-            if (self._options['Retry Codes'][err.code] === true) {
+            if (options['Retry Codes'][err.code] === true) {
               self.emit('metrics.increment', err.code);
-              return self.getReleases(releaseListURL);
+              return self.getReleases(releaseListURL, options);
             }
             reject(err);
           }
@@ -464,7 +465,7 @@ class Scraper extends EventEmitter {
               for (let rIndex = 0; rIndex < releaseList.length; rIndex++) {
                 const mbid = releaseList[rIndex]['$']['id'];
                 const coverArtUrl = `${
-                  self._options['CoverArtArchive']['Base URL']
+                  options['CoverArtArchive']['Base URL']
                 }/${mbid}`;
                 releases[coverArtUrl] = mbid;
               }
@@ -476,7 +477,7 @@ class Scraper extends EventEmitter {
     });
   }
 
-  getReleaseCount(firstReleaseListURL) {
+  getReleaseCount(firstReleaseListURL, options = this._options) {
     const self = this;
     return new Promise((resolve, reject) => {
       request(
@@ -484,16 +485,16 @@ class Scraper extends EventEmitter {
         {
           rejectUnauthorized: false,
           headers: {
-            'User-Agent': self._options['MusicBrainz']['User-Agent']
+            'User-Agent': options['MusicBrainz']['User-Agent']
           },
           agent: false
         },
         (err, res, body) => {
           if (err) {
             self.logger.http(err);
-            if (self._options['Retry Codes'][err.code] === true) {
+            if (options['Retry Codes'][err.code] === true) {
               self.emit('metrics.increment', err.code);
-              return self.getReleaseCount(firstReleaseListURL);
+              return self.getReleaseCount(firstReleaseListURL, options);
             }
             reject(err);
           }

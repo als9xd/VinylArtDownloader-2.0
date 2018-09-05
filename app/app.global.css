@@ -85,7 +85,7 @@ body {
 }
 
 .sidebar ul {
-  margin-top: 0;
+  margin-top: 5px;
   margin-bottom: 55px;
   list-style-type: none;
   padding-left: 10px;
@@ -115,6 +115,12 @@ body {
   background: #333;
 }
 
+.sidebar .sidebar-footer .btn {
+  display: inline-block;
+  margin-right: 5px;
+  margin-left: 5px;
+}
+
 .sidebar .sidebar-footer .sidebar-footer-container {
   margin: 10px;
 }
@@ -128,4 +134,8 @@ body {
 .row {
   width: 100%;
   display: inline-block;
+}
+
+.hidden {
+  display: none !important;
 }
