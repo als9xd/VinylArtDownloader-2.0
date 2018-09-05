@@ -1,9 +1,15 @@
 .metrics-banner {
+  background-color: #222;
   width: 100%;
+  overflow: hidden;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  height: 150px;
 }
 
 .metrics-banner table {
-  width: 100%;
+  border: 1px solid #333;
   border-spacing: 10px;
   border-collapse: separate;
 }
@@ -12,4 +18,19 @@
   text-align: center;
   padding: 0;
   margin: 0;
+}
+
+.tables-row {
+  display: flex;
+  max-width: 1280px;
+}
+
+.inline-table {
+  vertical-align: top !important;
+  display: inline-block !important;
+  flex-shrink: 1;
+}
+
+.vertical-table td {
+  text-align: left !important;
 }

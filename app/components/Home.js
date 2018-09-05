@@ -16,11 +16,7 @@ const Scraper = require('../actions/scraper');
 
 type Props = {};
 
-const scraper = new Scraper({
-  MusicBrainz: {
-    'Page Count': 1
-  }
-});
+const scraper = new Scraper();
 
 export default class Home extends Component<Props> {
   props: Props;
@@ -32,7 +28,7 @@ export default class Home extends Component<Props> {
     self.state = {
       ready: false,
       running: false,
-      metricsTable: scraper.getMetricsTable(),
+      metrics: scraper.metrics,
       // Input
       'Output Directory': path.resolve(scraper.defaults['Output Directory']),
       Database: {
@@ -44,7 +40,7 @@ export default class Home extends Component<Props> {
       },
       MusicBrainz: {
         'Page Offset': scraper.defaults['MusicBrainz']['Page Offset'],
-        'Page Count': scraper.defaults['MusicBrainz']['Page Count']
+        'Page Count': 0
       },
       'Image Size': 'Default',
       rateData: {
@@ -72,6 +68,12 @@ export default class Home extends Component<Props> {
           break;
         default:
       }
+      this.setState(newState);
+    });
+
+    scraper.on('metrics.refresh',metrics => {
+      const newState = Object.assign({}, this.state);
+      newState.metrics = metrics;
       this.setState(newState);
     });
 
@@ -184,8 +186,10 @@ export default class Home extends Component<Props> {
   }
 
   render() {
-    const { metricsTable, ready, running, rateData } = this.state;
+    const { metrics, ready, running, rateData } = this.state;
     const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
       elements: {
         point: {
           radius: 0
@@ -213,7 +217,7 @@ export default class Home extends Component<Props> {
     return (
       <div className="container" data-tid="container">
         <Resize handleWidth="5px" handleColor="#777">
-          <ResizeHorizon width="500px" minWidth="200px">
+          <ResizeHorizon width="350px" minWidth="200px">
             <div className="sidebar">
               <ul>
                 <li>
@@ -253,7 +257,7 @@ export default class Home extends Component<Props> {
                     info="Initial Page Offset"
                     type="number"
                     def={0}
-                    min="0"
+                    min={0}
                     max={
                       // eslint-disable-next-line react/destructuring-assignment
                       this.state['MusicBrainz']['Page Count']
@@ -265,13 +269,12 @@ export default class Home extends Component<Props> {
                     type="number"
                     def={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['MusicBrainz']['Page Count']
+                      this.state['MusicBrainz']['Page Count']  || 0
                     }
-                    min="0"
+                    min={0}
                     max={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['MusicBrainz']['Page Count'] -
-                      this.state['MusicBrainz']['Page Offset']
+                      this.state['MusicBrainz']['Page Count'] || 0 - this.state['MusicBrainz']['Page Offset']
                     }
                     changeInput={this.onPageCountChange.bind(this)}
                   />
@@ -307,8 +310,10 @@ export default class Home extends Component<Props> {
           </ResizeHorizon>
           <ResizeHorizon minWidth="150px">
             <div className="page-content">
-              <Line data={rateData} redraw options={chartOptions} />
-              <MetricsTable data={metricsTable} />
+              <div className="chart-info">
+                <Line data={rateData} redraw options={chartOptions} />
+              </div>
+              <MetricsTable metrics={metrics} inputData={{page_count:this.state['MusicBrainz']['Page Count']}} />
             </div>
           </ResizeHorizon>
         </Resize>

@@ -44,6 +44,7 @@ class Scraper extends EventEmitter {
         self.emit('lock_change', self.locked);
         self.emit('ready');
 
+        self.emit('metrics.set','release_count',releaseCount);
         const nPages = Math.floor(
           releaseCount / self._options['MusicBrainz']['Page Limit']
         );
@@ -125,7 +126,10 @@ class Scraper extends EventEmitter {
       missing_cover_art: 0,
       rate_limits: 0,
       musicbrainz_page_count: 0,
-      musicbrainz_pages_scraped: 0
+      musicbrainz_pages_scraped: 0,
+      musicbrainz: {
+
+      }
     };
 
     const numRetryCodes = {};
@@ -147,66 +151,6 @@ class Scraper extends EventEmitter {
         self.emit('metrics.refresh', self.metrics);
       })
     };
-  }
-
-  getMetricsTable(metrics = this.metrics) {
-    const metricsTable = [
-      {
-        header: {
-          title: 'Total Downloads',
-          color: 'green'
-        },
-        value: m => m.total_downloaded
-      },
-      {
-        header: {
-          title: 'Total Checked',
-          color: 'green'
-        },
-        value: m => m.total_checked
-      },
-      {
-        header: {
-          title: 'Rate Limits Hit',
-          color: 'cyan'
-        },
-        value: m => m['rate_limits']
-      },
-      {
-        header: {
-          title: 'ETIMEDOUT',
-          color: 'red'
-        },
-        value: m => m['ETIMEDOUT']
-      },
-      {
-        header: {
-          title: 'ECONNRESET',
-          color: 'red'
-        },
-        value: m => m['ECONNRESET']
-      },
-      {
-        header: {
-          title: 'ENOTFOUND',
-          color: 'red'
-        },
-        value: m => m['ENOTFOUND']
-      },
-      {
-        header: {
-          title: 'ECONNREFUSED',
-          color: 'red'
-        },
-        value: m => m['ECONNREFUSED']
-      }
-    ];
-
-    return metricsTable.map(metric => {
-      const evaluatedMetric = metric;
-      evaluatedMetric.value = evaluatedMetric.value(metrics);
-      return evaluatedMetric;
-    });
   }
 
   downloadImage(imageURL, options = this._options) {
