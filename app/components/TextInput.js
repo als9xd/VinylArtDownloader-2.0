@@ -6,8 +6,9 @@ import styles from './TextInput.css';
 class TextInput extends Component {
   constructor(props) {
     super(props);
+    console.log("value: "+this.props.value);
     this.state = {
-      value: null
+      value: this.props.value
     };
 
     this.onInputChange = this.onInputChange.bind(this);
@@ -23,7 +24,7 @@ class TextInput extends Component {
   }
 
   render() {
-    const { info, type, min, max, def } = this.props;
+    const { info, type, min, max } = this.props;
     const { value } = this.state;
 
     return (
@@ -35,7 +36,7 @@ class TextInput extends Component {
             min={min}
             max={max}
             onChange={this.onInputChange}
-            value={value || def}
+            value={value}
           />
         </div>
       </div>
@@ -48,7 +49,7 @@ TextInput.propTypes = {
   type: PropTypes.string,
   min: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   max: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  def: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   changeInput: PropTypes.func
 };
 
@@ -57,7 +58,7 @@ TextInput.defaultProps = {
   type: 'text',
   min: 0,
   max: 0,
-  def: '',
+  value: 0,
   changeInput: () => {}
 };
 

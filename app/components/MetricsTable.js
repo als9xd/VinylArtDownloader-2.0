@@ -6,11 +6,11 @@ import styles from './MetricsTable.css';
 class MetricsTable extends Component {
 
   render() {
-    const { metrics, inputData} = this.props;
+    const { metrics} = this.props;
     const topTable = [
       {
         header: 'MusicBrainz Pages Scraped',
-        value: `${metrics.musicbrainz_pages_scraped} / ${inputData.page_count}`,
+        value: `${metrics.musicbrainz_pages_scraped} / ${metrics.musicbrainz_page_count}`,
         color: '#28a745'
       },
       {

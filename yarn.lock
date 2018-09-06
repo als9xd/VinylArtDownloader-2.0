@@ -8829,6 +8829,12 @@ remove-trailing-separator@^1.0.1:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/remove-trailing-separator/-/remove-trailing-separator-1.1.0.tgz#c24bce2a283adad5bc3f58e0d48249b92379d8ef"
 
+rename-keys@^2.0.1:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/rename-keys/-/rename-keys-2.0.1.tgz#805efe4a1afceb40c48107ff8d2a969982dbf837"
+  dependencies:
+    isobject "^3.0.1"
+
 repeat-element@^1.1.2:
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/repeat-element/-/repeat-element-1.1.2.tgz#ef089a178d1483baae4d93eb98b4f9e4e11d990a"
@@ -10227,6 +10233,10 @@ typedarray@^0.0.6:
   version "0.0.6"
   resolved "https://registry.yarnpkg.com/typedarray/-/typedarray-0.0.6.tgz#867ac74e3864187b1d3d47d996a78ec5c8830777"
 
+typeof@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/typeof/-/typeof-1.0.0.tgz#9c84403f2323ae5399167275497638ea1d2f2440"
+
 ua-parser-js@^0.7.18:
   version "0.7.18"
   resolved "https://registry.yarnpkg.com/ua-parser-js/-/ua-parser-js-0.7.18.tgz#a7bfd92f56edfb117083b69e31d2aa8882d4b1ed"
@@ -11104,9 +11114,9 @@ yargs@~3.10.0:
     decamelize "^1.0.0"
     window-size "0.1.0"
 
-yarn@^1.9.2:
-  version "1.9.2"
-  resolved "https://registry.yarnpkg.com/yarn/-/yarn-1.9.2.tgz#7666c6db0fed8dc090ae0dce11a8a28b1d82e391"
+yarn@^1.9.4:
+  version "1.9.4"
+  resolved "https://registry.yarnpkg.com/yarn/-/yarn-1.9.4.tgz#3b82d8446b652775723900b470d966861976924b"
 
 yauzl@2.4.1:
   version "2.4.1"

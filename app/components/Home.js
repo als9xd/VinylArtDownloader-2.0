@@ -29,20 +29,8 @@ export default class Home extends Component<Props> {
       ready: false,
       running: false,
       metrics: scraper.metrics,
+      options: scraper.getOptions(),
       // Input
-      'Output Directory': path.resolve(scraper.defaults['Output Directory']),
-      Database: {
-        Location: path.resolve(scraper.defaults['Database']['Location']),
-        'File Name': path.basename(scraper.defaults['Database']['Location']),
-        'File Path': path.resolve(
-          path.dirname(scraper.defaults['Database']['Location'])
-        )
-      },
-      MusicBrainz: {
-        'Page Offset': scraper.defaults['MusicBrainz']['Page Offset'],
-        'Page Count': 0
-      },
-      'Image Size': 'Default',
       rateData: {
         labels: [],
         datasets: [
@@ -62,12 +50,7 @@ export default class Home extends Component<Props> {
 
     scraper.on('metrics.set', (key, value) => {
       const newState = Object.assign({}, this.state);
-      switch (key) {
-        case 'musicbrainz_page_count':
-          newState['MusicBrainz']['Page Count'] = value;
-          break;
-        default:
-      }
+      newState.metrics[key] = value;
       this.setState(newState);
     });
 
@@ -80,7 +63,7 @@ export default class Home extends Component<Props> {
     scraper.on('ready', () => {
       const newState = Object.assign({}, this.state);
       newState.ready = true;
-      newState['MusicBrainz']['Page Count'] = scraper.page_count;
+      newState.options.musicbrainz.page_count = scraper.page_count;
       this.setState(newState);
     });
 
@@ -96,30 +79,30 @@ export default class Home extends Component<Props> {
   scrape() {
     const self = this;
 
-    scraper.run(this.state);
+    scraper.run(this.state._options);
 
     const maxDisplayIntervals = 20;
     const updateTable = setInterval(() => {
-      if (!scraper.locked) {
+      if (!self.state.running) {
         clearInterval(updateTable);
       }
       const newState = Object.assign({}, self.state);
       const { metrics } = scraper;
 
-      const timeDelta = (new Date() - metrics['start_time']) / 1000;
+      const timeDelta = (new Date() - metrics.start_time) / 1000;
 
       const checksChartData = newState.rateData.datasets[0].data;
       if (checksChartData.length >= maxDisplayIntervals) {
         checksChartData.shift();
       }
-      checksChartData.push(metrics['total_checked'] / timeDelta);
+      checksChartData.push(metrics.total_checked / timeDelta);
       newState.rateData.datasets[0].data = checksChartData;
 
       const downloadsChartData = newState.rateData.datasets[1].data;
       if (downloadsChartData.length >= maxDisplayIntervals) {
         downloadsChartData.shift();
       }
-      downloadsChartData.push(metrics['total_downloaded'] / timeDelta);
+      downloadsChartData.push(metrics.total_downloaded / timeDelta);
       newState.rateData.datasets[1].data = downloadsChartData;
 
       const timeChartData = newState.rateData.labels;
@@ -135,7 +118,7 @@ export default class Home extends Component<Props> {
 
   onOutputDirectoryChange(newOutputDirectory) {
     const newState = Object.assign({}, this.state);
-    newState['Output Directory'] = newOutputDirectory;
+    newState.options.output_directory = newOutputDirectory;
     this.setState(newState);
   }
 
@@ -143,11 +126,12 @@ export default class Home extends Component<Props> {
     const databaseFullPath = path.resolve(newDatabaseFileName);
 
     const newState = Object.assign({}, this.state);
-    newState['Database'] = {
-      Location: databaseFullPath,
-      'File Name': path.basename(databaseFullPath),
-      'File Path': path.dirname(databaseFullPath)
-    };
+    newState.options.database = {
+      location: databaseFullPath,
+      file_name: path.basename(databaseFullPath),
+      file_path: path.dirname(databaseFullPath)
+    }
+
     this.setState(newState);
   }
 
@@ -155,33 +139,33 @@ export default class Home extends Component<Props> {
     // eslint-disable-next-line react/destructuring-assignment
     const databaseFullPath = path.join(
       newDatabasePathName,
-      this.state['Database']['File Name']
+      this.state.options.database.file_name
     );
 
     const newState = Object.assign({}, this.state);
-    newState['Database'] = {
-      Location: databaseFullPath,
-      'File Name': path.basename(databaseFullPath),
-      'File Path': path.dirname(databaseFullPath)
+    newState.database = {
+      location: databaseFullPath,
+      file_name: path.basename(databaseFullPath),
+      file_path: path.dirname(databaseFullPath)
     };
     this.setState(newState);
   }
 
   onPageOffsetChange(newPageOffset) {
     const newState = Object.assign({}, this.state);
-    newState['MusicBrainz']['Page Offset'] = Number(newPageOffset);
+    newState.options.musicbrainz_page_offset = Number(newPageOffset);
     this.setState(newState);
   }
 
   onPageCountChange(newPageCount) {
     const newState = Object.assign({}, this.state);
-    newState['MusicBrainz']['Page Count'] = Number(newPageCount);
+    newState.options.musicbrainz_page_count = Number(newPageCount);
     this.setState(newState);
   }
 
   onImageSizeChange(newImageSize) {
     const newState = Object.assign({}, this.state);
-    newState['Image Size'] = newImageSize === 'Default' ? null : newImageSize;
+    newState.options.image_size = newImageSize === 'default' ? null : newImageSize;
     this.setState(newState);
   }
 
@@ -225,9 +209,9 @@ export default class Home extends Component<Props> {
                   <FileInput
                     title="Output Directory"
                     directory="true"
-                    def={
+                    value={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['Output Directory']
+                      this.state.output_directory
                     }
                     changeFileInput={this.onOutputDirectoryChange.bind(this)}
                   />
@@ -236,17 +220,17 @@ export default class Home extends Component<Props> {
                   <TitleBar title="Database" />
                   <TextInput
                     info="File Name"
-                    def={
+                    value={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['Database']['File Name']
+                      this.state.options.database.file_name
                     }
                     changeInput={this.onDatabaseFileNameChange.bind(this)}
                   />
                   <FileInput
                     directory="false"
-                    def={
+                    value={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['Database']['File Path']
+                      this.state.options.database.file_path
                     }
                     changeFileInput={this.onDatabaseFilePathChange.bind(this)}
                   />
@@ -256,25 +240,25 @@ export default class Home extends Component<Props> {
                   <TextInput
                     info="Initial Page Offset"
                     type="number"
-                    def={0}
+                    value={0}
                     min={0}
                     max={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['MusicBrainz']['Page Count']
+                      this.state.metrics.musicbrainz.page_count
                     }
                     changeInput={this.onPageOffsetChange.bind(this)}
                   />
                   <TextInput
                     info="Page Count"
                     type="number"
-                    def={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state['MusicBrainz']['Page Count']  || 0
-                    }
                     min={0}
                     max={
                       // eslint-disable-next-line react/destructuring-assignment
-                      this.state['MusicBrainz']['Page Count'] || 0 - this.state['MusicBrainz']['Page Offset']
+                      (this.state.metrics.musicbrainz.page_count  || 0) - this.state.options.musicbrainz.page_offset
+                    }
+                    value={
+                      // eslint-disable-next-line react/destructuring-assignment
+                      this.state.metrics.musicbrainz.page_count
                     }
                     changeInput={this.onPageCountChange.bind(this)}
                   />
@@ -313,7 +297,7 @@ export default class Home extends Component<Props> {
               <div className="chart-info">
                 <Line data={rateData} redraw options={chartOptions} />
               </div>
-              <MetricsTable metrics={metrics} inputData={{page_count:this.state['MusicBrainz']['Page Count']}} />
+              <MetricsTable metrics={metrics} />
             </div>
           </ResizeHorizon>
         </Resize>
