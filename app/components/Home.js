@@ -50,10 +50,9 @@ export default class Home extends Component<Props> {
 
     scraper.on('metrics.set', obj => {
       const { musicbrainz } = obj;
-      const { page_count } = musicbrainz;
       switch (true) {
-        case musicbrainz && typeof page_count !== 'undefined':
-          this.state.options.musicbrainz.page_count = page_count; // eslint-disable-line react/destructuring-assignment
+        case musicbrainz && typeof musicbrainz.page_count !== 'undefined':
+          this.state.options.musicbrainz.page_count = musicbrainz.page_count; // eslint-disable-line react/destructuring-assignment
           break;
         default:
       }
@@ -81,20 +80,19 @@ export default class Home extends Component<Props> {
   scrape() {
     const self = this;
 
-    const { running, options } = self.state;
-    if (running) return;
+    const { options } = self.state;
+    if (self.state.running) return;
 
     scraper.run(options);
 
     const maxDisplayIntervals = 20;
     const updateTable = setInterval(() => {
-      if (!running) {
+      if (!self.state.running) {
         clearInterval(updateTable);
       }
       const newState = Object.assign({}, self.state);
 
       const metrics = scraper.getMetrics();
-      console.log(metrics);
 
       const timeDelta = (new Date() - metrics.start_time) / 1000;
 
