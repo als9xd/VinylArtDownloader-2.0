@@ -6,9 +6,6 @@ import styles from './FileInput.css';
 class FileInput extends Component {
   constructor(props) {
     super(props);
-    this.state = {
-      location: null
-    };
 
     this.locationInput = React.createRef();
     this.triggerInput = this.triggerInput.bind(this);
@@ -21,26 +18,20 @@ class FileInput extends Component {
   }
 
   onFileInputChange(evt) {
-    const { changeFileInput } = this.props;
-    this.setState({
-      location: evt.target.files[0].path
-    });
-    changeFileInput(evt.target.files[0].path);
+    const { changeInput } = this.props;
+    changeInput(evt.target.files[0].path);
   }
 
   render() {
-    const { directory, def } = this.props;
-    const { location } = this.state;
+    const { directory, value } = this.props;
 
     return (
       <div className={styles['file-input']}>
         <div className="row">
           <span className={styles['location-placeholder']}>
             Location:
-            <div className={styles['location-placeholder-value']}>
-              {' '}
-              {location || def}
-            </div>
+            {'\u00A0'}
+            <div className={styles['location-placeholder-value']}>{value}</div>
           </span>
           <label
             htmlFor={this.locationInput}
@@ -63,14 +54,14 @@ class FileInput extends Component {
 
 FileInput.propTypes = {
   directory: PropTypes.string,
-  changeFileInput: PropTypes.func,
-  def: PropTypes.string
+  changeInput: PropTypes.func,
+  value: PropTypes.string
 };
 
 FileInput.defaultProps = {
   directory: 'false',
-  changeFileInput: () => {},
-  def: ''
+  changeInput: () => {},
+  value: ''
 };
 
 export default FileInput;

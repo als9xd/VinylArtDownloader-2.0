@@ -10,8 +10,8 @@ class DropDown extends Component {
   }
 
   onOptionChange(evt) {
-    const { changeDropdownOption } = this.props;
-    changeDropdownOption(evt.target.value);
+    const { changeInput } = this.props;
+    changeInput(evt.target.value);
   }
 
   render() {
@@ -37,13 +37,13 @@ class DropDown extends Component {
 DropDown.propTypes = {
   options: PropTypes.arrayOf(PropTypes.string),
   info: PropTypes.string,
-  changeDropdownOption: PropTypes.func
+  changeInput: PropTypes.func
 };
 
 DropDown.defaultProps = {
   options: [],
   info: '',
-  changeDropdownOption: () => {}
+  changeInput: () => {}
 };
 
 export default DropDown;

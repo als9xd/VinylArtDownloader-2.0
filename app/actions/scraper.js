@@ -12,32 +12,28 @@ const winston = require('winston');
 
 const { RateLimiter } = require('limiter');
 
-
 /* Load Config */
 
-const configFile = 'config.json';
-const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-
-/* Main */
-
 const rename = require('rename-keys');
-const typeOf = require('typeOf');
+const typeOf = require('typeof');
+
+/* eslint-disable */
 function renameDeep(obj, cb) {
-  var type = typeOf(obj);
+  const type = typeOf(obj);
 
   if (type !== 'object' && type !== 'array') {
     throw new Error('expected an object');
   }
 
-  var res = [];
+  let res = [];
   if (type === 'object') {
     obj = rename(obj, cb);
     res = {};
   }
 
-  for (var key in obj) {
+  for (const key in obj) {
     if (obj.hasOwnProperty(key)) {
-      var val = obj[key];
+      const val = obj[key];
       if (typeOf(val) === 'object' || typeOf(val) === 'array') {
         res[key] = renameDeep(val, cb);
       } else {
@@ -46,45 +42,64 @@ function renameDeep(obj, cb) {
     }
   }
   return res;
-};
+}
+/* eslint-enable */
 
+const configFile = 'config.json';
+const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+
+/* Main */
+
+/* eslint-disable no-underscore-dangle */
 class Scraper extends EventEmitter {
   constructor(options = {}) {
     super();
     const self = this;
-    self.emit('lock.set',true);
 
-    const parsedConfig = renameDeep(config, function(key) {
-      return key.split(' ').join('_').toLowerCase();
+    self.on('lock.set', locked => {
+      self._locked = locked;
     });
 
-    const parsedOptions = renameDeep(options, function(key) {
-      return key.replace(' ','_').toLowerCase();
-    });
+    self.emit('lock.set', true);
+
+    const parsedConfig = renameDeep(config, key =>
+      key
+        .split(' ')
+        .join('_')
+        .toLowerCase()
+    );
+    const parsedOptions = renameDeep(options, key =>
+      key
+        .split(' ')
+        .join('_')
+        .toLowerCase()
+    );
 
     self._options = _.merge({}, parsedConfig, parsedOptions);
 
     self._initLogger();
 
     self._initMetrics();
-    self.getReleaseCount(
-      `${
-        self._options.musicbrainz.base_url
-      }?query=*&type=album&format=Vinyl&limit=1&offset=0&fmt=json`,
-      self._options
-    )
+    self
+      .getReleaseCount(
+        `${
+          self._options.musicbrainz.base_url
+        }?query=*&type=album&format=Vinyl&limit=1&offset=0&fmt=json`,
+        self._options
+      )
       .then(releaseCount => {
-        self.locked = false;
-        self.emit('lock_change', self.locked);
+        self.emit('lock.set', false);
         self.emit('ready');
 
         self._options.musicbrainz.release_count = releaseCount;
-        self.emit('metrics.set',{musicbrainz:{release_count:releaseCount}});
+        self.emit('metrics.set', {
+          musicbrainz: { release_count: releaseCount }
+        });
         const nPages = Math.floor(
-          releaseCount / self._options.musicbrainz.page_limit
+          releaseCount / self._options.musicbrainz.releases_per_page
         );
         self.musicbrainz_page_count = nPages;
-        self.emit('metrics.set',{musicbrainz:{page_count:nPages}});
+        self.emit('metrics.set', { musicbrainz: { page_count: nPages } });
         return nPages;
       })
       .catch(err => {
@@ -92,11 +107,11 @@ class Scraper extends EventEmitter {
       });
   }
 
-  getOptions(){
+  getOptions() {
     return this._options;
   }
 
-  getMetrics(){
+  getMetrics() {
     return this._metrics;
   }
 
@@ -126,10 +141,7 @@ class Scraper extends EventEmitter {
       }
     };
 
-    const logDir = path.resolve(
-      __dirname,
-      this._options.logging.directory
-    );
+    const logDir = path.resolve(__dirname, this._options.logging.directory);
     if (!fs.existsSync(logDir)) {
       mkdirp.sync(logDir);
     }
@@ -161,22 +173,21 @@ class Scraper extends EventEmitter {
 
   _initMetrics() {
     const self = this;
-
-    let options = self.getOptions();
+    const options = self.getOptions();
 
     const metricsDefaults = {
       start_time: new Date(),
-      coverartarchive:{
-        total_checked: 0,
-        total_downloaded: 0,
+      coverartarchive: {
+        images_downloaded: 0,
+        missing_cover_art: 0
       },
-      release_count: options.musicbrainz.release_count,
-      missing_cover_art: 0,
-      rate_limits: 0,
       musicbrainz: {
+        releases_checked: 0,
+        release_count: options.musicbrainz.release_count,
         page_count: options.musicbrainz.page_count,
         pages_scraped: 0,
         page_offset: 0,
+        rate_limits: 0
       }
     };
 
@@ -189,23 +200,17 @@ class Scraper extends EventEmitter {
 
     if (typeof self._metrics_listeners !== 'undefined') return;
     self._metrics_listeners = {
-      'metrics.set': this.on('metrics.set', (obj) => {
+      'metrics.set': this.on('metrics.set', obj => {
         self._metrics = _.merge({}, self._metrics, obj);
-        self.emit('metrics.refresh', self._metrics);
-      }),
-
-      'metrics.increment': this.on('metrics.increment', key => {
-        self._metrics[key]=self._metrics[key]+1;
         self.emit('metrics.refresh', self._metrics);
       })
     };
   }
 
-  run(options={}) {
+  run(options = {}) {
     const self = this;
-    options = _.merge({}, self.getOptions(), options);
-
-    if (self._locked) callback();
+    options = _.merge({}, self.getOptions(), options); // eslint-disable-line no-param-reassign
+    if (self._locked) return Promise.resolve();
     self.emit('lock.set', true);
 
     self._initMetrics();
@@ -216,52 +221,68 @@ class Scraper extends EventEmitter {
       });
     }
 
-    return new Promise(
-      (resolve,reject) => {
-        /* Start Scraping */
-        const { 
-          page_count, 
-          page_offset, 
-          page_limit,
-          base_url
-        } = options.musicbrainz;
+    return new Promise((resolve, reject) => {
+      /* Start Scraping */
+      const {
+        page_count,
+        page_offset,
+        releases_per_page,
+        base_url
+      } = options.musicbrainz;
 
-        const releaseListPageURLs = [];
-        for (let pageIndex = page_offset;pageIndex < page_count + page_offset;pageIndex++) {
-          releaseListPageURLs.push(
-            `${
-              base_url
-            }?query=*&type=album&format=Vinyl&limit=${
-              page_limit
-            }&offset=${pageIndex * page_limit}&fmt=json`
-          );
-        }
-
-        // https://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
-        const limiter = new RateLimiter(
-          options.musicbrainz.requests_per_sec,
-          'second'
+      const releaseListPageURLs = [];
+      for (
+        let pageIndex = page_offset;
+        pageIndex < page_count + page_offset;
+        pageIndex += 1
+      ) {
+        releaseListPageURLs.push(
+          `${base_url}?query=*&type=album&format=Vinyl&limit=${releases_per_page}&offset=${pageIndex *
+            releases_per_page}&fmt=json`
         );
+      }
+      // https://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
+      const limiter = new RateLimiter(
+        options.musicbrainz.requests_per_sec,
+        'second'
+      );
 
-        const _caaImagePromises = caaImageURLs => 
-          Promise.all(
-            caaImageURLs.map(caaImageURL => 
-              self.downloadImage(caaImageURL, options)                      
-              .then(filePath => {
-                self.emit('metrics.increment','coverartarchive.images_downloaded');
-                return filePath;
-              }) 
+      const _caaImagePromises = caaImageURLs =>
+        Promise.all(
+          caaImageURLs.map(caaImageURL =>
+            self.downloadImage(caaImageURL, options).then(filePath => {
+              if (!self._locked) return Promise.resolve();
+              self.emit('metrics.set', {
+                coverartarchive: {
+                  images_downloaded:
+                    self.getMetrics().coverartarchive.images_downloaded + 1
+                }
+              });
+              return filePath;
+            })
           )
         );
 
-        const _caaReleasePagePromises = (url) => 
-          Promise.all(
-            url.map(caaReleasePageURL => 
-              self.getCaaImageURLs(caaReleasePageURL, options)
+      const _caaReleasePagePromises = urls =>
+        Promise.all(
+          urls.map(caaReleasePageURL =>
+            self
+              .getCaaImageURLs(caaReleasePageURL, options)
               .then(caaImageURLs => {
-                self.emit('metrics.increment', 'coverartarchive.total_checked');
+                if (!self._locked) return Promise.resolve();
+                self.emit('metrics.set', {
+                  musicbrainz: {
+                    releases_checked:
+                      self.getMetrics().musicbrainz.releases_checked + 1
+                  }
+                });
                 if (!caaImageURLs) {
-                  self.emit('metrics.increment', 'coverartarchive.missing_cover_art');
+                  self.emit('metrics.set', {
+                    coverartarchive: {
+                      missing_cover_art:
+                        self.getMetrics().coverartarchive.missing_cover_art + 1
+                    }
+                  });
                   return;
                 }
                 return _caaImagePromises(caaImageURLs);
@@ -269,34 +290,40 @@ class Scraper extends EventEmitter {
           )
         );
 
-        const _releaseListPromises = urls => 
-          Promise.all(
-            urls.map(url => 
-              _removeTokens(limiter, 1)
+      const _releaseListPromises = urls =>
+        Promise.all(
+          urls.map(url =>
+            _removeTokens(limiter, 1)
               .then(() => self.getReleases(url, options))
               .then(releases => {
-                self.emit('metrics.increment', 'musicbrainz.pages_scraped');
+                console.log(self._locked);
+                if (!self._locked) return Promise.resolve();
+                self.emit('metrics.set', {
+                  musicbrainz: {
+                    pages_scraped:
+                      self.getMetrics().musicbrainz.pages_scraped + 1
+                  }
+                });
                 return _caaReleasePagePromises(Object.keys(releases));
               })
           )
         );
 
-        /* Finished Scraping */
-        return _releaseListPromises(releaseListPageURLs)
+      /* Finished Scraping */
+      return _releaseListPromises(releaseListPageURLs)
         .then(() => {
           self.emit('lock.set', false);
-          resolve();
+          return resolve();
         })
         .catch(err => {
           reject(err);
-        });        
-      }
-    );
+        });
+    });
   }
 
   downloadImage(imageURL, options = {}) {
     const self = this;
-    options = _.merge({}, self.getOptions(), options);
+    options = _.merge({}, self.getOptions(), options); // eslint-disable-line no-param-reassign
 
     const dir = options.output_directory;
     return new Promise((resolve, reject) => {
@@ -310,7 +337,10 @@ class Scraper extends EventEmitter {
           if (err) {
             self.logger.http(err);
             if (options.retry_codes[err.code.toLowerCase()] === true) {
-              self.emit('metrics.increment', err.code.toLowerCase());
+              const errCodeMetric = {};
+              errCodeMetric[err.code.toLowerCase()] =
+                self.getMetrics()[err.code.toLowerCase()] + 1;
+              self.emit('metrics.set', errCodeMetric);
               return self.downloadImage(imageURL, options);
             }
             reject(err);
@@ -319,22 +349,22 @@ class Scraper extends EventEmitter {
           const urlSplit = imageURL.split('/');
           const fileName = urlSplit[urlSplit.length - 1];
           const filePath = path.join(dir, fileName);
-          fs.access(dir, fs.constants.F_OK, err => {
-            if (err) {
-              if (err.code === 'ENOENT') {
-                mkdirp(dir, err => {
-                  if (err) reject(err);
-                  fs.writeFile(filePath, body, 'binary', err => {
-                    if (err) reject(err);
+          fs.access(dir, fs.constants.F_OK, faErr => {
+            if (faErr) {
+              if (faErr.code === 'ENOENT') {
+                mkdirp(dir, fmErr => {
+                  if (fmErr) reject(fmErr);
+                  fs.writeFile(filePath, body, 'binary', fwErr => {
+                    if (fwErr) reject(fwErr);
                     resolve(filePath);
                   });
                 });
                 return;
               }
-              reject(err);
+              reject(faErr);
             }
-            fs.writeFile(filePath, body, 'binary', err => {
-              if (err) reject(err);
+            fs.writeFile(filePath, body, 'binary', fwErr => {
+              if (fwErr) reject(fwErr);
               resolve(filePath);
             });
           });
@@ -345,7 +375,7 @@ class Scraper extends EventEmitter {
 
   getCaaImageURLs(caaReleaseURL, options = {}) {
     const self = this;
-    options = _.merge({}, self.getOptions(), options);
+    options = _.merge({}, self.getOptions(), options); // eslint-disable-line no-param-reassign
 
     return new Promise((resolve, reject) => {
       request(
@@ -358,7 +388,10 @@ class Scraper extends EventEmitter {
           if (err) {
             self.logger.http(err);
             if (options.retry_codes[err.code.toLowerCase()] === true) {
-              self.emit('metrics.increment', err.code.toLowerCase());
+              const errCodeMetric = {};
+              errCodeMetric[err.code.toLowerCase()] =
+                self.getMetrics()[err.code.toLowerCase()] + 1;
+              self.emit('metrics.set', errCodeMetric);
               return self.getCaaImageURLs(caaReleaseURL, options);
             }
             reject(err);
@@ -372,7 +405,7 @@ class Scraper extends EventEmitter {
           const imageURLs = [];
           const imageObjs = res.body.images;
           if (typeof imageObjs !== 'undefined') {
-            for (let i = 0; i < imageObjs.length; i++) {
+            for (let i = 0; i < imageObjs.length; i += 1) {
               if (imageObjs[i].front === true) {
                 const imageSize = options.coverartarchive.image_size.toLowerCase();
                 if (imageSize === 'default') {
@@ -393,7 +426,7 @@ class Scraper extends EventEmitter {
 
   getReleases(releaseListURL, options = {}) {
     const self = this;
-    options = _.merge({}, self.getOptions(), options);
+    options = _.merge({}, self.getOptions(), options); // eslint-disable-line no-param-reassign
 
     return new Promise((resolve, reject) => {
       request(
@@ -409,7 +442,10 @@ class Scraper extends EventEmitter {
           if (err) {
             self.logger.http(err);
             if (options.retry_codes[err.code.toLowerCase()] === true) {
-              self.emit('metrics.increment', err.code.toLowerCase());
+              const errCodeMetric = {};
+              errCodeMetric[err.code.toLowerCase()] =
+                self.getMetrics()[err.code.toLowerCase()] + 1;
+              self.emit('metrics.set', errCodeMetric);
               return self.getReleases(releaseListURL, options);
             }
             reject(err);
@@ -418,16 +454,22 @@ class Scraper extends EventEmitter {
           // Rate limiting
           if (res.statusCode === 503) {
             self.logger.ratelimit('Hit Rate Limit');
-            self.emit('metrics.increment', 'rate_limits_hit');
+            self.emit('metrics.set', {
+              musicbrainz: {
+                rate_limits_hit:
+                  self.getMetrics().musicbrainz.rate_limits_hit + 1
+              }
+            });
             return self.getReleases(releaseListURL);
           }
-          let results = JSON.parse(body);
-          
-          const releaseList = results['releases'];
+
+          const results = JSON.parse(body);
+
+          const releaseList = results.releases;
           if (typeof releaseList !== 'undefined') {
             const releases = [];
-            for (let rIndex = 0; rIndex < releaseList.length; rIndex++) {
-              const mbid = releaseList[rIndex]['id'];
+            for (let rIndex = 0; rIndex < releaseList.length; rIndex += 1) {
+              const mbid = releaseList[rIndex].id;
               const coverArtUrl = `${options.coverartarchive.base_url}/${mbid}`;
               releases[coverArtUrl] = mbid;
             }
@@ -438,8 +480,10 @@ class Scraper extends EventEmitter {
     });
   }
 
-  getReleaseCount(firstReleaseListURL, options = this._options) {
+  getReleaseCount(firstReleaseListURL, options = {}) {
     const self = this;
+    options = _.merge({}, self.getOptions(), options); // eslint-disable-line no-param-reassign
+
     return new Promise((resolve, reject) => {
       request(
         firstReleaseListURL,
@@ -453,11 +497,14 @@ class Scraper extends EventEmitter {
         (err, res, body) => {
           if (err) {
             self.logger.http(err);
-            if(typeof err.code !== 'undefined'){
+            if (typeof err.code !== 'undefined') {
               if (options.retry_codes[err.code.toLowerCase()] === true) {
-                self.emit('metrics.increment', err.code.toLowerCase());
+                const errCodeMetric = {};
+                errCodeMetric[err.code.toLowerCase()] =
+                  self.getMetrics()[err.code.toLowerCase()] + 1;
+                self.emit('metrics.set', errCodeMetric);
                 return self.getReleaseCount(firstReleaseListURL, options);
-              }              
+              }
             }
             reject(err);
           }
@@ -467,5 +514,6 @@ class Scraper extends EventEmitter {
     });
   }
 }
+/* eslint-enable no-underscore-dangle */
 
 module.exports = Scraper;

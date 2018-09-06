@@ -10,6 +10,8 @@ import TextInput from './TextInput';
 import DropDown from './DropDown';
 import MetricsTable from './MetricsTable';
 
+const _ = require('lodash');
+
 const path = require('path');
 
 const Scraper = require('../actions/scraper');
@@ -26,68 +28,73 @@ export default class Home extends Component<Props> {
     const self = this;
 
     self.state = {
-      ready: false,
       running: false,
-      metrics: scraper.metrics,
+      metrics: scraper.getMetrics(),
       options: scraper.getOptions(),
-      // Input
       rateData: {
         labels: [],
         datasets: [
           {
             label: 'Checks/Sec',
-            borderColor: '#F4A460',
+            borderColor: '#27474E ',
             data: []
           },
           {
             label: 'Downloads/Sec',
-            borderColor: '#BC8F8F',
+            borderColor: '#A93F55',
             data: []
           }
         ]
       }
     };
 
-    scraper.on('metrics.set', (key, value) => {
+    scraper.on('metrics.set', obj => {
+      const { musicbrainz } = obj;
+      const { page_count } = musicbrainz;
+      switch (true) {
+        case musicbrainz && typeof page_count !== 'undefined':
+          this.state.options.musicbrainz.page_count = page_count; // eslint-disable-line react/destructuring-assignment
+          break;
+        default:
+      }
       const newState = Object.assign({}, this.state);
-      newState.metrics[key] = value;
+      newState.metrics = _.merge({}, newState.metrics, obj);
       this.setState(newState);
     });
 
-    scraper.on('metrics.refresh',metrics => {
+    scraper.on('metrics.refresh', metrics => {
       const newState = Object.assign({}, this.state);
       newState.metrics = metrics;
       this.setState(newState);
     });
 
-    scraper.on('ready', () => {
+    scraper.on('lock.set', locked => {
       const newState = Object.assign({}, this.state);
-      newState.ready = true;
-      newState.options.musicbrainz.page_count = scraper.page_count;
-      this.setState(newState);
-    });
-
-    scraper.on('lock_change', status => {
-      const newState = Object.assign({}, this.state);
-      newState.running = status;
+      newState.running = locked;
       this.setState(newState);
     });
 
     this.scrape = this.scrape.bind(this);
+    this.onOptionChange = this.onOptionChange.bind(this);
   }
 
   scrape() {
     const self = this;
 
-    scraper.run(this.state._options);
+    const { running, options } = self.state;
+    if (running) return;
+
+    scraper.run(options);
 
     const maxDisplayIntervals = 20;
     const updateTable = setInterval(() => {
-      if (!self.state.running) {
+      if (!running) {
         clearInterval(updateTable);
       }
       const newState = Object.assign({}, self.state);
-      const { metrics } = scraper;
+
+      const metrics = scraper.getMetrics();
+      console.log(metrics);
 
       const timeDelta = (new Date() - metrics.start_time) / 1000;
 
@@ -95,14 +102,16 @@ export default class Home extends Component<Props> {
       if (checksChartData.length >= maxDisplayIntervals) {
         checksChartData.shift();
       }
-      checksChartData.push(metrics.total_checked / timeDelta);
+      checksChartData.push(metrics.musicbrainz.releases_checked / timeDelta);
       newState.rateData.datasets[0].data = checksChartData;
 
       const downloadsChartData = newState.rateData.datasets[1].data;
       if (downloadsChartData.length >= maxDisplayIntervals) {
         downloadsChartData.shift();
       }
-      downloadsChartData.push(metrics.total_downloaded / timeDelta);
+      downloadsChartData.push(
+        metrics.coverartarchive.images_downloaded / timeDelta
+      );
       newState.rateData.datasets[1].data = downloadsChartData;
 
       const timeChartData = newState.rateData.labels;
@@ -111,66 +120,19 @@ export default class Home extends Component<Props> {
       }
       timeChartData.push(Math.round(timeDelta * 10) / 10);
       newState.rateData.labels = timeChartData;
-
+      console.log(newState.rateData);
       self.setState(newState);
     }, 1000);
   }
 
-  onOutputDirectoryChange(newOutputDirectory) {
+  onOptionChange(obj) {
     const newState = Object.assign({}, this.state);
-    newState.options.output_directory = newOutputDirectory;
-    this.setState(newState);
-  }
-
-  onDatabaseFileNameChange(newDatabaseFileName) {
-    const databaseFullPath = path.resolve(newDatabaseFileName);
-
-    const newState = Object.assign({}, this.state);
-    newState.options.database = {
-      location: databaseFullPath,
-      file_name: path.basename(databaseFullPath),
-      file_path: path.dirname(databaseFullPath)
-    }
-
-    this.setState(newState);
-  }
-
-  onDatabaseFilePathChange(newDatabasePathName) {
-    // eslint-disable-next-line react/destructuring-assignment
-    const databaseFullPath = path.join(
-      newDatabasePathName,
-      this.state.options.database.file_name
-    );
-
-    const newState = Object.assign({}, this.state);
-    newState.database = {
-      location: databaseFullPath,
-      file_name: path.basename(databaseFullPath),
-      file_path: path.dirname(databaseFullPath)
-    };
-    this.setState(newState);
-  }
-
-  onPageOffsetChange(newPageOffset) {
-    const newState = Object.assign({}, this.state);
-    newState.options.musicbrainz_page_offset = Number(newPageOffset);
-    this.setState(newState);
-  }
-
-  onPageCountChange(newPageCount) {
-    const newState = Object.assign({}, this.state);
-    newState.options.musicbrainz_page_count = Number(newPageCount);
-    this.setState(newState);
-  }
-
-  onImageSizeChange(newImageSize) {
-    const newState = Object.assign({}, this.state);
-    newState.options.image_size = newImageSize === 'default' ? null : newImageSize;
+    newState.options = _.merge({}, newState.options, obj);
     this.setState(newState);
   }
 
   render() {
-    const { metrics, ready, running, rateData } = this.state;
+    const { metrics, options, running, rateData } = this.state;
     const chartOptions = {
       responsive: true,
       maintainAspectRatio: false,
@@ -209,30 +171,27 @@ export default class Home extends Component<Props> {
                   <FileInput
                     title="Output Directory"
                     directory="true"
-                    value={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state.output_directory
+                    value={path.resolve(options.output_directory)}
+                    changeInput={newValue =>
+                      this.onOptionChange({ output_directory: newValue })
                     }
-                    changeFileInput={this.onOutputDirectoryChange.bind(this)}
                   />
                 </li>
                 <li>
                   <TitleBar title="Database" />
                   <TextInput
                     info="File Name"
-                    value={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state.options.database.file_name
+                    value={options.database.file_name}
+                    changeInput={newValue =>
+                      this.onOptionChange({ database: { file_name: newValue } })
                     }
-                    changeInput={this.onDatabaseFileNameChange.bind(this)}
                   />
                   <FileInput
                     directory="false"
-                    value={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state.options.database.file_path
+                    value={path.resolve(options.database.file_path)}
+                    changeInput={newValue =>
+                      this.onOptionChange({ database: { file_path: newValue } })
                     }
-                    changeFileInput={this.onDatabaseFilePathChange.bind(this)}
                   />
                 </li>
                 <li>
@@ -240,27 +199,29 @@ export default class Home extends Component<Props> {
                   <TextInput
                     info="Initial Page Offset"
                     type="number"
-                    value={0}
+                    value={options.musicbrainz.page_offset}
                     min={0}
-                    max={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state.metrics.musicbrainz.page_count
+                    max={metrics.musicbrainz.page_count}
+                    changeInput={newValue =>
+                      this.onOptionChange({
+                        musicbrainz: { page_offset: newValue }
+                      })
                     }
-                    changeInput={this.onPageOffsetChange.bind(this)}
                   />
                   <TextInput
                     info="Page Count"
                     type="number"
                     min={0}
                     max={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      (this.state.metrics.musicbrainz.page_count  || 0) - this.state.options.musicbrainz.page_offset
+                      metrics.musicbrainz.page_count -
+                      options.musicbrainz.page_offset
                     }
-                    value={
-                      // eslint-disable-next-line react/destructuring-assignment
-                      this.state.metrics.musicbrainz.page_count
+                    value={options.musicbrainz.page_count}
+                    changeInput={newValue =>
+                      this.onOptionChange({
+                        musicbrainz: { page_count: newValue }
+                      })
                     }
-                    changeInput={this.onPageCountChange.bind(this)}
                   />
                 </li>
                 <li>
@@ -268,7 +229,11 @@ export default class Home extends Component<Props> {
                   <DropDown
                     info="Image Size"
                     options={['Default', 'Small', 'Large']}
-                    changeDropdownOption={this.onImageSizeChange.bind(this)}
+                    changeInput={newValue =>
+                      this.onOptionChange({
+                        coverartarchive: { image_size: newValue }
+                      })
+                    }
                   />
                 </li>
               </ul>
@@ -276,7 +241,7 @@ export default class Home extends Component<Props> {
                 <div className="sidebar-footer-container">
                   <button
                     type="button"
-                    className={`btn ${ready ? '' : 'hidden'}`}
+                    className={`btn ${running ? 'hidden' : ''}`}
                     onClick={this.scrape}
                   >
                     Run
@@ -284,7 +249,9 @@ export default class Home extends Component<Props> {
                   <button
                     type="button"
                     className={`btn ${running ? '' : 'hidden'}`}
-                    onClick={this.scrape}
+                    onClick={() => {
+                      scraper.emit('lock.set', false);
+                    }}
                   >
                     Stop
                   </button>
@@ -297,7 +264,7 @@ export default class Home extends Component<Props> {
               <div className="chart-info">
                 <Line data={rateData} redraw options={chartOptions} />
               </div>
-              <MetricsTable metrics={metrics} />
+              <MetricsTable metrics={metrics} options={options} />
             </div>
           </ResizeHorizon>
         </Resize>

@@ -6,26 +6,24 @@ import styles from './TextInput.css';
 class TextInput extends Component {
   constructor(props) {
     super(props);
-    console.log("value: "+this.props.value);
-    this.state = {
-      value: this.props.value
-    };
-
     this.onInputChange = this.onInputChange.bind(this);
   }
 
   onInputChange(evt) {
-    const { value } = evt.target;
-    const { changeInput } = this.props;
-    this.setState({
-      value
-    });
+    let { value } = evt.target;
+    const { changeInput, type } = this.props;
+    if (type === 'number') {
+      if (value.length === 0) {
+        value = '';
+      } else {
+        value = Number(value);
+      }
+    }
     changeInput(value);
   }
 
   render() {
-    const { info, type, min, max } = this.props;
-    const { value } = this.state;
+    const { info, type, min, max, value } = this.props;
 
     return (
       <div className={styles['text-input']}>

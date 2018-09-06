@@ -1,7 +1,8 @@
 {
   "Version": "1.0",
   "Database": {
-    "Location": "data.db",
+    "File Name": "data.db",
+    "File Path": ".",
     "Schema": "CREATE TABLE IF NOT EXISTS releases(mbid STRING PRIMARY KEY,fileName STRING NOT NULL)",
     "Queries": {
       "insert": "INSERT INTO releases (mbid,filename) VALUES (?,?)",
@@ -12,10 +13,9 @@
   "Output Directory": "images/",
   "MusicBrainz": {
     "Base URL": "https://musicbrainz.org/ws/2/release",
-    "Page Limit": 100,
+    "Releases Per Page": 100,
     "Page Offset": 0,
     "Page Count": 0,
-    "Max Pages": 0,
     "Requests Per Sec": 1,
     "User Agent": "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
   },
